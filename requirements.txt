@@ -1,0 +1,8 @@
+PyQt5==5.15.11
+PyQtWebEngine==5.15.7
+pytz==2026.5
+tzlocal==5.4.5
+requests==2.34.2
+pandas==2.3.3
+plotly==6.9.0
+python-dotenv==1.2.4
