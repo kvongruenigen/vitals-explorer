@@ -25,8 +25,8 @@ The script prints a new directory under ignored `publication/`. It uses an expli
 Each snapshot includes `LICENSE` and `COPYRIGHT`. In the snapshot:
 
 1. Inspect `PUBLICATION_REVIEW.txt` and every included file. Verify the README clone URL points to `kvongruenigen/vitals-explorer`, and that GPL-3.0-only is stated consistently.
-2. Install `requirements-dev.txt` in a new virtual environment. Run `python -m pytest -q` and `python -m ruff check main.py biobeat tests scripts`. Desktop tests are optional; set `RUN_GUI_TESTS=1` in a desktop session.
-3. Run `python main.py --demo`, click **Fetch Data**, inspect the charts/table, and export a synthetic CSV. No API access is needed. Keep exported CSVs out of Git.
+2. Install `requirements-dev.txt` in a new virtual environment. Run `python -m pytest -q` and `python -m ruff check main.py biobeat run_demo.py tests scripts`. Desktop tests are optional; set `RUN_GUI_TESTS=1` in a desktop session.
+3. Run the guided demo launcher, inspect automatic synthetic loading and the charts/table, and export a synthetic CSV. No API access is needed. Keep exported CSVs out of Git.
 4. Run `detect-secrets scan --all-files --no-verify` with the environment/caches excluded, and review its results privately. Do not publish scanner output containing sensitive values. Review all configuration and assets as well; scanning is not a guarantee.
 5. Once all review items are resolved, remove the temporary `PUBLICATION_REVIEW.txt` from the snapshot and initialize a new Git repository **inside that snapshot directory**.
 
@@ -45,6 +45,6 @@ Review the staged file list before committing. It must contain no `.env` (except
 - Use the synthetic screenshot near the top of the README and keep the credential-free demo command prominent.
 - Describe your contribution: independently built a Python/Qt research application integrating an authenticated API, timezone-aware processing, Plotly visualization, and CSV export; added background retrieval and mocked tests.
 - State that the demo uses synthetic data, live integration requires authorized access, and this revision's live API behavior has not yet been verified.
-- A short recording of the synthetic app can show chart interaction and export without asking recruiters to install it. Review every frame for desktop notifications, real data, and credentials before sharing.
+- The bundled `docs/videos/demo-synthetic.mp4` shows the actual synthetic app, chart interaction, sorting, resizing, and export; recreate it using `python scripts/record_demo.py` with FFmpeg available. Review every frame for desktop notifications, real data, and credentials before sharing.
 
 A source repository and screenshots are enough for the first portfolio release. An executable is optional and can follow after target-platform, dependency-license, and signing checks. A fresh Git history is appropriate here; do not fabricate historical commits to replace the private research history.

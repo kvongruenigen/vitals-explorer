@@ -13,14 +13,17 @@ PUBLIC_REPO_URL = 'https://github.com/kvongruenigen/vitals-explorer.git'
 FILES = (
     '.env.example', '.gitignore', 'README.md', 'SECURITY.md', 'LICENSE', 'COPYRIGHT',
     'requirements.txt', 'requirements-dev.txt', 'pytest.ini', 'ruff.toml',
-    'main.py', 'build_app.sh', 'building.ps1', 'version_info.txt',
+    'main.py', 'run_demo.py', 'run_demo.command', 'run_demo.cmd',
+    'build_app.sh', 'building.ps1', 'version_info.txt', '.github/workflows/tests.yml',
     'biobeat/auth.py', 'biobeat/config.py', 'biobeat/demo.py',
     'biobeat/errors.py', 'biobeat/fetch.py', 'biobeat/plot.py', 'biobeat/utils.py',
+    'biobeat/quality.py', 'biobeat/results.py',
     'res/app-icon.svg', 'res/app-icon.png', 'res/app-icon.ico',
-    'scripts/demo_screenshots.py', 'scripts/export_portfolio.py',
+    'scripts/demo_screenshots.py', 'scripts/record_demo.py', 'scripts/export_portfolio.py',
     'tests/test_core.py', 'tests/test_gui.py', 'tests/test_publication.py',
+    'tests/test_quality.py', 'tests/test_launcher.py',
     'docs/images/main-synthetic.png', 'docs/images/plots-synthetic.png',
-    'docs/images/table-synthetic.png', 'docs/PUBLISHING.md',
+    'docs/images/table-synthetic.png', 'docs/videos/demo-synthetic.mp4', 'docs/PUBLISHING.md',
 )
 
 
