@@ -109,7 +109,7 @@ For explicitly authorized noninteractive setup, use `python3 run_demo.py --setup
 
 ### Manual environment setup
 
-Use **Python 3.11 or 3.12** with a desktop session. Verification was performed on macOS with Python 3.12; Windows/Linux packaging still needs platform-specific verification. Qt WebEngine requires suitable system graphics libraries.
+Use **Python 3.11 or 3.12** with a desktop session. Verification was performed on macOS with Python 3.12; Windows/Linux packaging still needs platform-specific verification. Qt WebEngine requires suitable system graphics libraries. For Ubuntu 24.04, the [desktop CI job](.github/workflows/tests.yml) lists the tested Qt/X11 system packages; virtual-display and sandbox adjustments in that job are for CI only.
 
 ```bash
 git clone https://github.com/kvongruenigen/vitals-explorer.git
