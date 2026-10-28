@@ -8,6 +8,8 @@ An independently developed Python desktop application for exploring physiologica
 
 Developed independently by the author using purchased, authorized BioBeat API access. BioBeat did not develop this application. The demo uses original neutral branding and synthetic data.
 
+[![Watch the 30-second synthetic demo](docs/images/main-synthetic.png)](docs/videos/demo-synthetic.mp4)
+
 **[Watch the 30-second synthetic demo](docs/videos/demo-synthetic.mp4)** — automatic loading, chart zoom, table sorting, resizable views, and CSV export.
 
 For recruiters: launch `run_demo.command` on macOS/Linux or `run_demo.cmd` on Windows. Alternatively run `python3 run_demo.py`. The launcher offers first-run setup in a local `.venv`; the demo then loads automatically. No API credentials or device access are needed.
@@ -27,8 +29,6 @@ For recruiters: launch `run_demo.command` on macOS/Linux or `run_demo.cmd` on Wi
 ## Screenshots
 
 These are captures of the actual application using **entirely synthetic measurements** and a fictional device. No participant data or live API access was used.
-
-![Main application with synthetic measurements](docs/images/main-synthetic.png)
 
 ![Interactive Plotly charts with synthetic measurements](docs/images/plots-synthetic.png)
 
@@ -50,7 +50,7 @@ Recreate the silent recording with FFmpeg installed on `PATH`:
 python scripts/record_demo.py
 ```
 
-FFmpeg is needed only for recording, not to run the app. The workflow captures only application-owned widgets/dialogs, verifies chart zoom and a 72-row CSV export, and produces a 30-second H.264 MP4. It does not capture the desktop or microphone.
+FFmpeg is needed only for recording, not to run the app. The workflow captures only application-owned widgets/dialogs, verifies chart zoom and a 72-row CSV export, and produces a 30-second H.264 MP4. It uses Qt export dialogs to keep the capture within application-owned widgets. It does not capture the desktop or microphone.
 
 ## Technical overview
 
