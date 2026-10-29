@@ -172,3 +172,27 @@ def test_export_keeps_loaded_provenance_on_control_change_failure_and_empty(qt_a
     assert window.df.empty and not window.download_button.isEnabled()
     assert window.quality_label.text() == 'No measurements loaded.'
     window.close()
+
+
+def test_workbench_layout_and_display_headers(qt_app):
+    from PyQt5.QtCore import Qt
+    from main import BiobeatApp
+    window = BiobeatApp(demo=True)
+    window.resize(1000, 800)
+    window.show()
+    wait_until(qt_app, lambda: window.worker is None and window.retrieval is not None)
+    assert window.timezone_dropdown.isVisible()
+    assert window.sidebar.width() == 258
+    assert window.quality_values['records'].text() == '72'
+    assert window.quality_values['missing'].text() == '0 / 432'
+    assert window.quality_values['median'].text() == '5 min'
+    panel = window.sidebar.widget()
+    for control in [window.device_dropdown, window.timezone_dropdown, window.start_date_edit,
+                    window.start_time_edit, window.end_date_edit, window.end_time_edit]:
+        assert control.mapTo(panel, control.rect().topRight()).x() <= panel.width()
+    model = window.table_view.model()
+    column = window.df.columns.get_loc('sbp')
+    assert model.headerData(column, Qt.Horizontal) == 'SBP (mmHg)'
+    assert 'sbp' in window.df.columns
+    assert window.table_view.horizontalHeader().logicalIndex(0) == window.df.columns.get_loc('datetime_tz')
+    window.close()

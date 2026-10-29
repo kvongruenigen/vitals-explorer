@@ -184,3 +184,17 @@ def test_missing_api_env(monkeypatch, key):
     monkeypatch.delenv(key)
     with pytest.raises(BioBeatError, match=key):
         api_settings()
+
+
+def test_plot_workbench_grid_and_linked_time_axes():
+    from biobeat.demo import synthetic_measurements
+    from biobeat.utils import normalize_measurements
+    from biobeat.plot import create_vitals_dashboard
+    figure = create_vitals_dashboard(normalize_measurements(synthetic_measurements(), 'UTC'), 'UTC')
+    assert len(figure.data) == 6
+    assert figure.layout.xaxis.domain[1] < figure.layout.xaxis2.domain[0]
+    assert figure.layout.xaxis2.domain[1] < figure.layout.xaxis3.domain[0]
+    assert figure.layout.yaxis.domain == figure.layout.yaxis3.domain
+    assert figure.layout.yaxis4.domain[1] < figure.layout.yaxis.domain[0]
+    assert figure.layout.xaxis6.matches == 'x'
+    assert figure.layout.paper_bgcolor == '#ffffff'

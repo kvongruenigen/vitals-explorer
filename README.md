@@ -211,3 +211,14 @@ Copyright © 2026 Kay von Grünigen. The original source code, documentation, sy
 Third-party dependencies retain their own licenses. PyQt5 and PyQtWebEngine are available under GPLv3 or separate commercial licenses; this source release uses the GPL-compatible distribution path. The BioBeat API service and its access rights are separate from this software license. No vendor logos or research measurements are included in the portfolio snapshot.
 
 Before distributing bundled executables, include all applicable third-party notices and meet the corresponding source and other license requirements for the exact bundled dependencies. This repository publishes source and synthetic screenshots; it does not include prebuilt executables.
+
+## Adjusting the desktop interface
+
+The light research workbench keeps request controls and loaded-dataset details in a
+scrollable left panel, with linked charts and a draggable chart/table splitter on
+the right. Demo controls remain fixed; the time zone selector stays available.
+
+To customize the GUI, edit `biobeat/theme.py` for Qt colors, spacing, typography,
+and display-only table labels; `main.py` (`_init_ui`) for widget layouts; and
+`biobeat/plot.py` for Plotly chart styling. Qt style sheets do not style Plotly's
+HTML canvas. CSV column names and measurement values are unchanged by table labels.
