@@ -17,7 +17,7 @@ FILES = (
     'build_app.sh', 'building.ps1', 'version_info.txt', '.github/workflows/tests.yml',
     'biobeat/auth.py', 'biobeat/config.py', 'biobeat/demo.py',
     'biobeat/errors.py', 'biobeat/fetch.py', 'biobeat/plot.py', 'biobeat/utils.py',
-    'biobeat/quality.py', 'biobeat/results.py',
+    'biobeat/quality.py', 'biobeat/results.py', 'biobeat/theme.py',
     'res/app-icon.svg', 'res/app-icon.png', 'res/app-icon.ico',
     'scripts/demo_screenshots.py', 'scripts/record_demo.py', 'scripts/export_portfolio.py',
     'tests/test_core.py', 'tests/test_gui.py', 'tests/test_publication.py',

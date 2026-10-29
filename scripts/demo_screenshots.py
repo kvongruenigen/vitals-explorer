@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtTest import QTest
+from PyQt5.QtCore import QPoint
 from main import BiobeatApp
 from biobeat.utils import export_csv
 
@@ -17,19 +19,25 @@ QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
 QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 app = QApplication(sys.argv)
 window = BiobeatApp(demo=True)
-window.resize(1400, 1100)
+window.resize(1280, 960)
 output = Path(__file__).resolve().parents[1] / 'docs/images'
 output.mkdir(parents=True, exist_ok=True)
 failed = True
+capturing = False
 
 
 def capture():
-    global failed
+    global failed, capturing
+    if capturing:
+        return
     if window.worker is not None or window.df is None:
         return
+    capturing = True
     assert len(window.df) == 72
     assert window.device_dropdown.currentText() == 'DEMO-001'
     assert window.download_button.isEnabled()
+    QTest.mouseMove(window.mode_badge, QPoint(5, 5))
+    QTest.qWait(150)
     assert window.grab().save(str(output / 'main-synthetic.png'))
     assert window.plot_view.grab().save(str(output / 'plots-synthetic.png'))
     # Keep the synthetic label and CSV controls visible alongside the data table.
@@ -54,8 +62,24 @@ def timeout():
     app.quit()
 
 
-window.plot_view.loadFinished.connect(lambda ok: QTimer.singleShot(2000, capture) if ok else None)
-# Capture relies on loadFinished so the Plotly page has rendered.
+def rendered(ready):
+    if ready and not capturing:
+        render_timer.stop()
+        QTimer.singleShot(500, capture)
+
+
+def check_rendered():
+    window.plot_view.page().runJavaScript(
+        "Boolean(document.querySelector('.plotly-graph-div') && "
+        "document.querySelector('.plotly-graph-div')._fullLayout && "
+        "document.querySelector('.plotly-graph-div').data.length === 6)", rendered)
+
+
+# The placeholder page also emits loadFinished; wait for actual Plotly rendering.
+render_timer = QTimer()
+render_timer.timeout.connect(check_rendered)
+render_timer.start(250)
+
 QTimer.singleShot(45000, timeout)
 window.show()
 app.exec_()

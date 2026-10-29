@@ -184,3 +184,34 @@ def test_missing_api_env(monkeypatch, key):
     monkeypatch.delenv(key)
     with pytest.raises(BioBeatError, match=key):
         api_settings()
+
+
+def test_plot_workbench_grid_and_linked_time_axes():
+    from biobeat.demo import synthetic_measurements
+    from biobeat.utils import normalize_measurements
+    from biobeat.plot import create_vitals_dashboard
+    figure = create_vitals_dashboard(normalize_measurements(synthetic_measurements(), 'UTC'), 'UTC')
+    assert len(figure.data) == 6
+    assert figure.layout.xaxis.domain[1] < figure.layout.xaxis2.domain[0]
+    assert figure.layout.xaxis2.domain[1] < figure.layout.xaxis3.domain[0]
+    assert figure.layout.yaxis.domain == figure.layout.yaxis3.domain
+    assert figure.layout.yaxis4.domain[1] < figure.layout.yaxis.domain[0]
+    assert figure.layout.xaxis6.matches == 'x'
+    assert figure.layout.paper_bgcolor == '#ffffff'
+
+
+def test_normal_range_bands_are_present_on_every_populated_subplot():
+    from biobeat.demo import synthetic_measurements
+    from biobeat.plot import create_vitals_dashboard
+    df = normalize_measurements(synthetic_measurements(), 'UTC')
+    figure = create_vitals_dashboard(df, 'UTC')
+    bands = [shape for shape in figure.layout.shapes if shape.type == 'rect']
+    thresholds = [shape for shape in figure.layout.shapes if shape.type == 'line']
+    assert len(bands) == 6
+    assert len(thresholds) == 12
+    expected = [(90, 120), (60, 80), (60, 100), (95, 100), (12, 18), (36.5, 37.3)]
+    for index, (band, bounds) in enumerate(zip(bands, expected), start=1):
+        assert (band.y0, band.y1) == bounds
+        assert band.yref == ('y' if index == 1 else f'y{index}')
+        assert band.layer == 'below'
+        assert band.opacity >= 0.4

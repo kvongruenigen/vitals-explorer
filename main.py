@@ -8,13 +8,14 @@ import tempfile
 import logging
 from pathlib import Path
 
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QPixmap, QPalette, QColor
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QDate, QTime, QUrl, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QComboBox,
     QDateEdit, QTimeEdit, QPushButton, QHBoxLayout,
-    QMessageBox, QFileDialog, QTableView, QSizePolicy, QSplitter,
+    QMessageBox, QFileDialog, QTableView, QSizePolicy, QSplitter, QScrollArea,
+    QFrame, QGridLayout, QStyle, QStyleFactory,
 )
 
 from biobeat.auth import get_access_token
@@ -26,6 +27,7 @@ from biobeat.errors import BioBeatError
 from biobeat.demo import synthetic_measurements, DEMO_START, DEMO_END
 from biobeat.quality import summarize_quality
 from biobeat.results import RetrievalResult
+from biobeat.theme import WORKBENCH_STYLE, TABLE_HEADERS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -104,7 +106,7 @@ class PandasModel(QAbstractTableModel):
         if role != Qt.DisplayRole:
             return QVariant()
         if orientation == Qt.Horizontal:
-            return self._df.columns[section]
+            return TABLE_HEADERS.get(self._df.columns[section], self._df.columns[section])
         return str(section + 1)  # Row numbers start at 1
 
 class RetrievalWorker(QThread):
@@ -133,13 +135,11 @@ class RetrievalWorker(QThread):
             path = ''
             if not df.empty:
                 figure = create_vitals_dashboard(df, timezone)
-                if demo:
-                    figure.update_layout(title_text='SYNTHETIC DEMONSTRATION — fictional measurements')
                 with tempfile.NamedTemporaryFile(dir=directory, suffix='.html', delete=False) as output:
                     path = output.name
                 html = figure.to_html(include_plotlyjs=True, default_height='100vh',
-                                      config={'responsive': True, 'displaylogo': False})
-                html = html.replace('<head>', '<head><style>body{margin:0}.plotly-graph-div{min-height:720px}</style>')
+                                      config={'responsive': True, 'displaylogo': False, 'displayModeBar': True})
+                html = html.replace('<head>', '<head><style>body{margin:0}.plotly-graph-div{min-height:520px}</style>')
                 Path(path).write_text(html, encoding='utf-8')
             if not self.isInterruptionRequested():
                 self.result.emit(RetrievalResult(
@@ -199,88 +199,154 @@ class BiobeatApp(QWidget):
         self.setWindowTitle("Vitals Explorer")
         self.setMinimumSize(1000, 800)
 
-        # Main layout with stretch factors
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        self.resize(1280, 960)
+        # Fusion and an explicit palette keep controls readable on dark OS themes.
+        self._workbench_style = QStyleFactory.create('Fusion')
+        self.setStyle(self._workbench_style)
+        palette = self.palette()
+        for role, color in [(QPalette.Window, '#f7f9fc'), (QPalette.Base, '#ffffff'),
+                            (QPalette.Text, '#18324f'), (QPalette.WindowText, '#18324f'),
+                            (QPalette.Button, '#ffffff'), (QPalette.ButtonText, '#18324f'),
+                            (QPalette.Highlight, '#ccefee'), (QPalette.HighlightedText, '#18324f')]:
+            palette.setColor(role, QColor(color))
+        self.setPalette(palette)
+        self.setStyleSheet(WORKBENCH_STYLE)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Form layout for controls
-        form_layout = QVBoxLayout()
+        header = QFrame()
+        header.setObjectName('appHeader')
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 14, 22, 14)
+        icon = QLabel()
+        resource_root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+        icon.setPixmap(QPixmap(str(resource_root / 'res/app-icon.png')).scaled(
+            46, 46, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        header_layout.addWidget(icon)
+        title = QLabel('Vitals Explorer')
+        title.setObjectName('appTitle')
+        header_layout.addWidget(title)
+        subtitle = QLabel('Research Workbench')
+        subtitle.setObjectName('subtitle')
+        header_layout.addWidget(subtitle)
+        header_layout.addStretch()
+        self.mode_badge = QLabel('SYNTHETIC DEMO' if self.demo else 'LIVE API')
+        self.mode_badge.setObjectName('modeBadge')
+        header_layout.addWidget(self.mode_badge)
+        main_layout.addWidget(header)
 
-        # Device selection
-        self.device_label = QLabel("Device ID:")
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        main_layout.addLayout(body, 1)
+        self.sidebar = QScrollArea()
+        self.sidebar.setObjectName('sidebar')
+        self.sidebar.setWidgetResizable(True)
+        self.sidebar.setFixedWidth(258)
+        self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        panel = QWidget()
+        panel.setObjectName('controlPanel')
+        form_layout = QVBoxLayout(panel)
+        form_layout.setContentsMargins(20, 18, 20, 20)
+        form_layout.setSpacing(10)
+        heading = QLabel('Sample' if self.demo else 'Retrieval')
+        heading.setObjectName('sectionTitle')
+        form_layout.addWidget(heading)
+        self.device_label = QLabel('Device ID')
         self.device_dropdown = QComboBox()
-        self.device_dropdown.addItems(['Please select a device ID', *self.devices])
+        self.device_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.device_dropdown.setMinimumContentsLength(12)
+        self.device_dropdown.addItems(['Select a device', *self.devices])
         if self.demo:
             self.device_dropdown.setCurrentIndex(1)
             self.setWindowTitle('Vitals Explorer — SYNTHETIC DEMONSTRATION')
-
-        # Timezone selection
-        self.timezone_label = QLabel(f"Time Zone: {get_localzone_name()}")
-        self.timezone_toggle = QPushButton("Change Timezone")
-
-        # Create widget for timezone selection
-        timezone_device_line = QHBoxLayout()
-        timezone_device_line.addWidget(self.device_label)
-        timezone_device_line.addWidget(self.device_dropdown)
-        timezone_device_line.addWidget(self.timezone_label)
-        timezone_device_line.addWidget(self.timezone_toggle)
-
-        # Timezone dropdown (hidden by default)
+        form_layout.addWidget(self.device_label)
+        form_layout.addWidget(self.device_dropdown)
+        self._init_datetime_controls()
+        for label, layout in [('Start date and time', self.start_datetime_layout),
+                              ('End date and time', self.end_datetime_layout)]:
+            form_layout.addWidget(QLabel(label))
+            form_layout.addLayout(layout)
+        self.timezone_label = QLabel('Time zone')
         self.timezone_dropdown = QComboBox()
+        self.timezone_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.timezone_dropdown.setMinimumContentsLength(12)
         self.timezone_dropdown.addItems(sorted(pytz.all_timezones))
         self.timezone_dropdown.setCurrentText(get_localzone_name())
-        self.timezone_dropdown.hide()
-
-        form_layout.addLayout(timezone_device_line)
+        self.timezone_dropdown.setAccessibleName('Display time zone')
+        form_layout.addWidget(self.timezone_label)
         form_layout.addWidget(self.timezone_dropdown)
-
-        # Date/time range
-        self._init_datetime_controls()
-        form_layout.addWidget(QLabel("Start Date and Time:"))
-        form_layout.addLayout(self.start_datetime_layout)
-        form_layout.addWidget(QLabel("End Date and Time:"))
-        form_layout.addLayout(self.end_datetime_layout)
-
-        # Buttons
-        self.fetch_button = QPushButton("Reload Demo" if self.demo else "Fetch Data")
-        self.download_button = QPushButton("Download CSV")
+        self.fetch_button = QPushButton('Reload demo' if self.demo else 'Fetch data')
+        self.fetch_button.setObjectName('primaryAction')
+        self.fetch_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self.download_button = QPushButton('Export CSV')
+        self.download_button.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
         self.download_button.setEnabled(False)
-
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.fetch_button)
-        button_layout.addWidget(self.download_button)
-        form_layout.addLayout(button_layout)
-
-        # Add form to main layout
+        form_layout.addSpacing(6)
+        form_layout.addWidget(self.fetch_button)
+        form_layout.addWidget(self.download_button)
         self.status_label = QLabel(
-            'SYNTHETIC DEMONSTRATION — fixed six-hour sample; device/dates locked; no API requests.'
-            if self.demo else self.configuration_error or (
-                'Ready.' if self.devices else
-                'No devices configured. Set BIOBEAT_DEVICE_IDS in your local .env and restart.'
-            )
-        )
+            'Fixed synthetic sample. No API requests.' if self.demo else
+            self.configuration_error or ('Ready.' if self.devices else
+                'No devices configured. Set BIOBEAT_DEVICE_IDS in your local .env and restart.'))
         self.status_label.setWordWrap(True)
+        self.status_label.setObjectName('statusText')
+        self.status_label.setTextFormat(Qt.PlainText)
         form_layout.addWidget(self.status_label)
-        self.fetch_button.setEnabled(bool(self.devices))
+        divider = QFrame()
+        divider.setObjectName('sectionDivider')
+        divider.setFixedHeight(1)
+        form_layout.addSpacing(8)
+        form_layout.addWidget(divider)
+        heading = QLabel('Loaded dataset')
+        heading.setObjectName('sectionTitle')
+        form_layout.addWidget(heading)
         self.quality_label = QLabel('No measurements loaded.')
         self.quality_label.setWordWrap(True)
+        self.quality_label.setTextFormat(Qt.PlainText)
+        self.quality_label.setObjectName('qualitySummary')
         self.quality_label.setToolTip(
-            'Missing values count the six vital columns. Cadence and long intervals '
-            'describe observed timestamps, not a known device schedule or a clinical assessment.'
-        )
+            'Missing values count the six physiological measurements. Intervals are inferred '
+            'from observed timestamps, not confirmed missing measurements or a clinical assessment.')
         form_layout.addWidget(self.quality_label)
-        main_layout.addLayout(form_layout)
+        self.quality_grid = QGridLayout()
+        self.quality_grid.setHorizontalSpacing(10)
+        self.quality_grid.setVerticalSpacing(12)
+        self.quality_values = {}
+        for row, (key, label) in enumerate([
+            ('records', 'Total records'), ('coverage', 'Actual coverage'), ('timezone', 'Time zone'),
+            ('missing', 'Missing values'), ('duplicates', 'Duplicate timestamps'),
+            ('median', 'Observed median interval'), ('long', 'Long intervals (>3× median)'),
+        ]):
+            caption, value = QLabel(label), QLabel('—')
+            caption.setWordWrap(True)
+            value.setWordWrap(True)
+            value.setTextFormat(Qt.PlainText)
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            value.setObjectName('qualityValue')
+            caption.setFixedWidth(105)
+            self.quality_grid.addWidget(caption, row, 0, Qt.AlignTop)
+            self.quality_grid.addWidget(value, row, 1, Qt.AlignTop)
+            self.quality_values[key] = value
+        form_layout.addLayout(self.quality_grid)
+        note = QLabel('Intervals inferred from timestamps; not confirmed missing measurements.')
+        note.setWordWrap(True)
+        note.setObjectName('statusText')
+        form_layout.addWidget(note)
+        form_layout.addStretch()
+        self.sidebar.setWidget(panel)
+        body.addWidget(self.sidebar)
 
-        # Tabbed view for plot and data
         self.plot_view = QWebEngineView()
         self.plot_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
+        self.plot_view.setHtml('<body style="font:14px sans-serif;color:#526780;background:#fff">'
+                               '<p>Select a device and interval, then fetch data.</p></body>')
         self.table_view = QTableView()
-        self.table_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.table_view.setAlternatingRowColors(True)
         self.table_view.setSortingEnabled(True)
-
+        self.table_view.verticalHeader().setDefaultSectionSize(28)
+        self.table_view.horizontalHeader().setMinimumSectionSize(70)
         self.splitter = QSplitter(Qt.Vertical)
         self.splitter.addWidget(self.plot_view)
         self.splitter.addWidget(self.table_view)
@@ -288,19 +354,31 @@ class BiobeatApp(QWidget):
         self.table_view.setMinimumHeight(120)
         self.splitter.setStretchFactor(0, 2)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([600, 300])
-        self.splitter.setHandleWidth(8)
-        main_layout.addWidget(self.splitter, stretch=1)
+        self.splitter.setSizes([570, 285])
+        self.splitter.setHandleWidth(9)
+        body.addWidget(self.splitter, 1)
 
-        self.setLayout(main_layout)
-
-        # Apply some basic styling
-        self.setStyleSheet("""
-            QPushButton {
-                padding: 5px;
-                min-width: 80px;
-            }
-        """)
+    def _update_quality(self, result):
+        quality = result.quality
+        self.quality_label.setText(quality.describe(result.timezone))
+        # The accessible full description remains available, while the grid is scanned visually.
+        self.sidebar.setAccessibleDescription(self.quality_label.text())
+        self.quality_label.setVisible(not quality.records)
+        values = dict.fromkeys(self.quality_values, '—')
+        if quality.records:
+            values.update(
+                records=str(quality.records),
+                coverage=f'{quality.first:%Y-%m-%d}\n{quality.first:%H:%M} – {quality.last:%Y-%m-%d %H:%M}'
+                if quality.first.date() != quality.last.date() else
+                f'{quality.first:%Y-%m-%d}\n{quality.first:%H:%M} – {quality.last:%H:%M}',
+                timezone=result.timezone, missing=f'{quality.missing} / {quality.records * 6}',
+                duplicates=str(quality.duplicates),
+                median='Insufficient intervals' if quality.median_seconds is None else
+                f'{quality.median_seconds / 60:g} min',
+                long='—' if quality.median_seconds is None else str(quality.long_intervals),
+            )
+        for key, value in values.items():
+            self.quality_values[key].setText(value)
 
     def _init_datetime_controls(self):
         """Initialize datetime controls with sensible defaults."""
@@ -317,34 +395,33 @@ class BiobeatApp(QWidget):
         self.end_time_edit.setTime(QTime.currentTime())
 
         # Layouts
+        self.start_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.end_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.start_time_edit.setDisplayFormat('HH:mm')
+        self.end_time_edit.setDisplayFormat('HH:mm')
         self.start_datetime_layout = QHBoxLayout()
-        self.start_datetime_layout.addWidget(self.start_date_edit)
+        self.start_time_edit.setFixedWidth(76)
+        self.end_time_edit.setFixedWidth(76)
+        self.start_datetime_layout.addWidget(self.start_date_edit, 1)
         self.start_datetime_layout.addWidget(self.start_time_edit)
 
         self.end_datetime_layout = QHBoxLayout()
-        self.end_datetime_layout.addWidget(self.end_date_edit)
+        self.end_datetime_layout.addWidget(self.end_date_edit, 1)
         self.end_datetime_layout.addWidget(self.end_time_edit)
 
     def _setup_connections(self):
         """Connect signals to slots."""
-        self.timezone_toggle.clicked.connect(self._toggle_timezone_dropdown)
         self.timezone_dropdown.currentTextChanged.connect(self._update_timezone_label)
         self.fetch_button.clicked.connect(self._on_fetch)
         self.download_button.clicked.connect(self._download_csv)
 
     def _update_timezone_label(self, timezone):
         """Update the displayed timezone label when dropdown changes."""
-        self.timezone_label.setText(f"Time Zone: {timezone}")
+        self.timezone_label.setToolTip(timezone)
         if self.demo:
             self._update_demo_range()
             if self._demo_started and self.worker is None and not self.closing:
                 self._on_fetch()
-
-    def _toggle_timezone_dropdown(self):
-        """Toggle visibility of timezone dropdown."""
-        visible = self.timezone_dropdown.isVisible()
-        self.timezone_dropdown.setVisible(not visible)
-        self.timezone_toggle.setText("Hide Timezone" if not visible else "Change Timezone")
 
     def _validate_inputs(self):
         """Validate user inputs before fetching data."""
@@ -422,7 +499,7 @@ class BiobeatApp(QWidget):
         self.retrieval = result
         df, path = result.dataframe, result.plot_path
         self.df = df
-        self.quality_label.setText(result.quality.describe(result.timezone))
+        self._update_quality(result)
         # Retain only the latest private plot after the worker has completed.
         for previous in Path(self.plot_directory.name).glob('*.html'):
             if str(previous) != path:
@@ -458,6 +535,11 @@ class BiobeatApp(QWidget):
         if 'datetime_tz' in df:
             self.table_view.sortByColumn(df.columns.get_loc('datetime_tz'), Qt.AscendingOrder)
         self.table_view.resizeColumnsToContents()
+        header = self.table_view.horizontalHeader()
+        preferred = ['datetime_tz', 'sbp', 'dbp', 'hr', 'spo2', 'rr', 'temp',
+                     'datetime_utc', 'timezone', 'battery', 'offline_records']
+        for position, column in enumerate(col for col in preferred if col in df.columns):
+            header.moveSection(header.visualIndex(df.columns.get_loc(column)), position)
 
     def _download_csv(self):
         """Handle CSV download with better filename generation."""
@@ -488,7 +570,6 @@ class BiobeatApp(QWidget):
     def _set_ui_enabled(self, enabled):
         """Enable or disable UI controls during operations."""
         self.device_dropdown.setEnabled(enabled and not self.demo)
-        self.timezone_toggle.setEnabled(enabled)
         self.timezone_dropdown.setEnabled(enabled)
         self.start_date_edit.setEnabled(enabled and not self.demo)
         self.start_time_edit.setEnabled(enabled and not self.demo)

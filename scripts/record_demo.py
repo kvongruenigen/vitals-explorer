@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -42,6 +43,7 @@ def record():
     output = ROOT / 'docs/videos/demo-synthetic.mp4'
     output.parent.mkdir(parents=True, exist_ok=True)
     state = {'frame': 0, 'loaded': False, 'zoom': False, 'error': None, 'export_path': None, 'save_frames': 0, 'success_frames': 0}
+    state['started'] = time.monotonic()
     previous_cwd = Path.cwd()
 
     with tempfile.TemporaryDirectory(prefix='VitalsExplorerDemo-') as directory:
@@ -72,7 +74,12 @@ def record():
             window.plot_view.page().runJavaScript(source)
 
         def loaded(ok):
-            state['loaded'] = ok
+            if ok:
+                window.plot_view.page().runJavaScript(
+                    "Boolean(document.querySelector('.plotly-graph-div') && "
+                    "document.querySelector('.plotly-graph-div')._fullLayout && "
+                    "document.querySelector('.plotly-graph-div').data.length === 6)",
+                    lambda ready: state.update(loaded=bool(ready)))
         window.plot_view.loadFinished.connect(loaded)
 
         def sort_table():
@@ -136,7 +143,12 @@ def record():
             try:
                 index = state['frame']
                 if index == 36:
-                    assert state['loaded'] and window.worker is None and len(window.df) == 72
+                    # Keep the recorded startup short but allow slower desktops to render.
+                    if not state['loaded'] or window.worker is not None:
+                        if time.monotonic() - state['started'] > 45:
+                            stop('Synthetic chart rendering timed out.')
+                        return
+                    assert len(window.df) == 72
                     assert window.retrieval.device_id == 'DEMO-001'
                 if index in actions:
                     # Separate event dispatch lets the frame timer continue in modal dialogs.
@@ -160,7 +172,7 @@ def record():
                     assert state['save_frames'] >= FPS and state['success_frames'] >= FPS
                     stop()
             except Exception as error:
-                stop(f'Recording verification failed: {type(error).__name__}')
+                stop(f'Recording verification failed at frame {state["frame"]}: {type(error).__name__}')
 
         timer = QTimer()
         timer.timeout.connect(capture)
