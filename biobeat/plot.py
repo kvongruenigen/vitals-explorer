@@ -55,7 +55,7 @@ def create_vitals_dashboard(df, user_tz):
             "Respiration Rate (breaths/min)",
             "Temperature (°C)"
         ),
-        vertical_spacing=0.15,  # Increased spacing
+        vertical_spacing=0.09,  # Increased spacing
         horizontal_spacing=0.1,
         specs=[
             [{"type": "xy"}, {"type": "xy"}],
@@ -134,7 +134,7 @@ def create_vitals_dashboard(df, user_tz):
 
     # Update layout with professional styling
     fig.update_layout(
-        height=1200,
+        autosize=True,
         title=dict(
             text=f"<b>Vital Signs Dashboard</b><br><span style='font-size:14px'>Time Range: {min_time.strftime('%Y-%m-%d %H:%M')} to {max_time.strftime('%Y-%m-%d %H:%M')} | Duration: {duration.days}d {duration.seconds//3600}h | Timezone: {user_tz}</span>",
             x=0.5,
@@ -143,7 +143,7 @@ def create_vitals_dashboard(df, user_tz):
             y=0.95  # Position title higher
         ),
         showlegend=False,
-        margin=dict(t=150, b=80, l=50, r=50),  # Increased top and bottom margins
+        margin=dict(t=120, b=65, l=50, r=50),  # Increased top and bottom margins
         template="plotly_white",
         hovermode="x unified",
         plot_bgcolor='rgba(240,240,240,0.8)',

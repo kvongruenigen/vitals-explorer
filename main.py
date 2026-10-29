@@ -10,11 +10,11 @@ from pathlib import Path
 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QDate, QTime, QUrl, QThread, pyqtSignal
+from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant, QDate, QTime, QUrl, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QComboBox,
     QDateEdit, QTimeEdit, QPushButton, QHBoxLayout,
-    QMessageBox, QFileDialog, QTableView, QSizePolicy,
+    QMessageBox, QFileDialog, QTableView, QSizePolicy, QSplitter,
 )
 
 from biobeat.auth import get_access_token
@@ -23,7 +23,9 @@ from biobeat.plot import create_vitals_dashboard
 from biobeat.utils import normalize_measurements, local_to_utc, export_csv
 from biobeat.config import load_device_ids
 from biobeat.errors import BioBeatError
-from biobeat.demo import synthetic_measurements
+from biobeat.demo import synthetic_measurements, DEMO_START, DEMO_END
+from biobeat.quality import summarize_quality
+from biobeat.results import RetrievalResult
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +38,7 @@ class PandasModel(QAbstractTableModel):
     """Improved DataFrame model for QTableView with better performance and type handling."""
     def __init__(self, df=None, parent=None):
         super().__init__(parent)
-        self._df = df.copy() if df is not None else pd.DataFrame()
+        self._df = df.copy().reset_index(drop=True) if df is not None else pd.DataFrame()
         self._column_types = self._determine_column_types()
 
     def _determine_column_types(self):
@@ -80,6 +82,24 @@ class PandasModel(QAbstractTableModel):
 
         return QVariant()
 
+    def sort(self, column, order=Qt.AscendingOrder):
+        if not 0 <= column < len(self._df.columns):
+            return
+        self.layoutAboutToBeChanged.emit()
+        old_indexes = self.persistentIndexList()
+        original_rows = pd.Series(range(len(self._df)), index=self._df.index)
+        self._df = self._df.sort_values(
+            self._df.columns[column], ascending=order == Qt.AscendingOrder,
+            kind='stable', na_position='last',
+        )
+        # Keep selections attached to the same records after reordering.
+        new_rows = {old: new for new, old in enumerate(original_rows.loc[self._df.index])}
+        self.changePersistentIndexList(old_indexes, [
+            self.index(new_rows[index.row()], index.column()) for index in old_indexes
+        ])
+        self._df = self._df.reset_index(drop=True)
+        self.layoutChanged.emit()
+
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role != Qt.DisplayRole:
             return QVariant()
@@ -88,7 +108,7 @@ class PandasModel(QAbstractTableModel):
         return str(section + 1)  # Row numbers start at 1
 
 class RetrievalWorker(QThread):
-    result = pyqtSignal(object, str)
+    result = pyqtSignal(object)
     error = pyqtSignal(str)
 
     def __init__(self, device_id, start, end, timezone, demo, directory, parent=None):
@@ -117,9 +137,14 @@ class RetrievalWorker(QThread):
                     figure.update_layout(title_text='SYNTHETIC DEMONSTRATION — fictional measurements')
                 with tempfile.NamedTemporaryFile(dir=directory, suffix='.html', delete=False) as output:
                     path = output.name
-                figure.write_html(path, include_plotlyjs=True)
+                html = figure.to_html(include_plotlyjs=True, default_height='100vh',
+                                      config={'responsive': True, 'displaylogo': False})
+                html = html.replace('<head>', '<head><style>body{margin:0}.plotly-graph-div{min-height:720px}</style>')
+                Path(path).write_text(html, encoding='utf-8')
             if not self.isInterruptionRequested():
-                self.result.emit(df, path)
+                self.result.emit(RetrievalResult(
+                    df, path, device_id, timezone, start, end, summarize_quality(df),
+                ))
         except BioBeatError as error:
             self.error.emit(str(error))
         except Exception:
@@ -135,6 +160,8 @@ class BiobeatApp(QWidget):
         self.setWindowIcon(QIcon(str(resource_root / 'res' / 'app-icon.png')))
         self.demo = demo
         self.df = None
+        self.retrieval = None
+        self._demo_started = False
         self.worker = None
         self.closing = False
         self.plot_directory = tempfile.TemporaryDirectory(prefix='biobeat-')
@@ -147,11 +174,25 @@ class BiobeatApp(QWidget):
         self._init_ui()
         self._setup_connections()
         if self.demo:
-            self.start_date_edit.setDate(QDate(2026, 1, 15))
-            self.end_date_edit.setDate(QDate(2026, 1, 15))
-            self.start_time_edit.setTime(QTime(9, 0))
-            self.end_time_edit.setTime(QTime(15, 0))
             self.timezone_dropdown.setCurrentText('Europe/Zurich')
+            self._update_demo_range()
+        self._set_ui_enabled(True)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.demo and not self._demo_started:
+            self._demo_started = True
+            QTimer.singleShot(0, self._on_fetch)
+
+    def _update_demo_range(self):
+        timezone = pytz.timezone(self.timezone_dropdown.currentText())
+        for stamp, date_control, time_control in [
+            (DEMO_START, self.start_date_edit, self.start_time_edit),
+            (DEMO_END, self.end_date_edit, self.end_time_edit),
+        ]:
+            local = stamp.astimezone(timezone)
+            date_control.setDate(QDate(local.year, local.month, local.day))
+            time_control.setTime(QTime(local.hour, local.minute))
 
     def _init_ui(self):
         """Initialize all UI components."""
@@ -202,7 +243,7 @@ class BiobeatApp(QWidget):
         form_layout.addLayout(self.end_datetime_layout)
 
         # Buttons
-        self.fetch_button = QPushButton("Fetch Data")
+        self.fetch_button = QPushButton("Reload Demo" if self.demo else "Fetch Data")
         self.download_button = QPushButton("Download CSV")
         self.download_button.setEnabled(False)
 
@@ -213,7 +254,7 @@ class BiobeatApp(QWidget):
 
         # Add form to main layout
         self.status_label = QLabel(
-            'SYNTHETIC DEMONSTRATION — fictional device and measurements; no API requests.'
+            'SYNTHETIC DEMONSTRATION — fixed six-hour sample; device/dates locked; no API requests.'
             if self.demo else self.configuration_error or (
                 'Ready.' if self.devices else
                 'No devices configured. Set BIOBEAT_DEVICE_IDS in your local .env and restart.'
@@ -222,6 +263,13 @@ class BiobeatApp(QWidget):
         self.status_label.setWordWrap(True)
         form_layout.addWidget(self.status_label)
         self.fetch_button.setEnabled(bool(self.devices))
+        self.quality_label = QLabel('No measurements loaded.')
+        self.quality_label.setWordWrap(True)
+        self.quality_label.setToolTip(
+            'Missing values count the six vital columns. Cadence and long intervals '
+            'describe observed timestamps, not a known device schedule or a clinical assessment.'
+        )
+        form_layout.addWidget(self.quality_label)
         main_layout.addLayout(form_layout)
 
         # Tabbed view for plot and data
@@ -233,8 +281,16 @@ class BiobeatApp(QWidget):
         self.table_view.setAlternatingRowColors(True)
         self.table_view.setSortingEnabled(True)
 
-        main_layout.addWidget(self.plot_view, stretch=2)
-        main_layout.addWidget(self.table_view, stretch=1)
+        self.splitter = QSplitter(Qt.Vertical)
+        self.splitter.addWidget(self.plot_view)
+        self.splitter.addWidget(self.table_view)
+        self.plot_view.setMinimumHeight(160)
+        self.table_view.setMinimumHeight(120)
+        self.splitter.setStretchFactor(0, 2)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([600, 300])
+        self.splitter.setHandleWidth(8)
+        main_layout.addWidget(self.splitter, stretch=1)
 
         self.setLayout(main_layout)
 
@@ -279,6 +335,10 @@ class BiobeatApp(QWidget):
     def _update_timezone_label(self, timezone):
         """Update the displayed timezone label when dropdown changes."""
         self.timezone_label.setText(f"Time Zone: {timezone}")
+        if self.demo:
+            self._update_demo_range()
+            if self._demo_started and self.worker is None and not self.closing:
+                self._on_fetch()
 
     def _toggle_timezone_dropdown(self):
         """Toggle visibility of timezone dropdown."""
@@ -320,6 +380,8 @@ class BiobeatApp(QWidget):
     def _get_datetime_range(self):
         """Get the selected datetime range in UTC."""
         tz_name = self.timezone_dropdown.currentText()
+        if self.demo:
+            return DEMO_START, DEMO_END, tz_name
 
         start_dt_local = datetime.datetime.combine(
             self.start_date_edit.date().toPyDate(),
@@ -336,7 +398,7 @@ class BiobeatApp(QWidget):
         return start_utc, end_utc, tz_name
 
     def _on_fetch(self):
-        if self.worker is not None or not self._validate_inputs():
+        if self.closing or self.worker is not None or not self._validate_inputs():
             return
         try:
             start, end, timezone = self._get_datetime_range()
@@ -354,10 +416,13 @@ class BiobeatApp(QWidget):
         self.worker.finished.connect(self._retrieval_finished)
         self.worker.start()
 
-    def _retrieval_result(self, df, path):
+    def _retrieval_result(self, result):
         if self.closing:
             return
+        self.retrieval = result
+        df, path = result.dataframe, result.plot_path
         self.df = df
+        self.quality_label.setText(result.quality.describe(result.timezone))
         # Retain only the latest private plot after the worker has completed.
         for previous in Path(self.plot_directory.name).glob('*.html'):
             if str(previous) != path:
@@ -390,6 +455,8 @@ class BiobeatApp(QWidget):
         """Update the table view with new data."""
         model = PandasModel(df)
         self.table_view.setModel(model)
+        if 'datetime_tz' in df:
+            self.table_view.sortByColumn(df.columns.get_loc('datetime_tz'), Qt.AscendingOrder)
         self.table_view.resizeColumnsToContents()
 
     def _download_csv(self):
@@ -398,15 +465,7 @@ class BiobeatApp(QWidget):
             QMessageBox.warning(self, "No Data", "No data available to download.")
             return
 
-        device_id = self.device_dropdown.currentText()
-        start_dt = self.df["datetime_utc"].min()
-        end_dt = self.df["datetime_utc"].max()
-
-        default_name = (
-            f"biobeat_{device_id}_"
-            f"{start_dt.strftime('%Y%m%d_%H%M')}_to_"
-            f"{end_dt.strftime('%Y%m%d_%H%M')}.csv"
-        )
+        default_name = self.retrieval.export_filename()
 
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Save CSV", default_name, "CSV Files (*.csv)"
@@ -428,17 +487,18 @@ class BiobeatApp(QWidget):
 
     def _set_ui_enabled(self, enabled):
         """Enable or disable UI controls during operations."""
-        self.device_dropdown.setEnabled(enabled)
+        self.device_dropdown.setEnabled(enabled and not self.demo)
         self.timezone_toggle.setEnabled(enabled)
         self.timezone_dropdown.setEnabled(enabled)
-        self.start_date_edit.setEnabled(enabled)
-        self.start_time_edit.setEnabled(enabled)
-        self.end_date_edit.setEnabled(enabled)
-        self.end_time_edit.setEnabled(enabled)
+        self.start_date_edit.setEnabled(enabled and not self.demo)
+        self.start_time_edit.setEnabled(enabled and not self.demo)
+        self.end_date_edit.setEnabled(enabled and not self.demo)
+        self.end_time_edit.setEnabled(enabled and not self.demo)
         self.fetch_button.setEnabled(enabled and bool(self.devices))
         self.download_button.setEnabled(enabled and self.df is not None and not self.df.empty)
 
     def closeEvent(self, event):
+        self.closing = True
         if self.worker is not None:
             self.closing = True
             self.worker.requestInterruption()

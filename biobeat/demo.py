@@ -3,8 +3,12 @@ from datetime import datetime, timedelta, timezone
 import math
 
 
+DEMO_START = datetime(2026, 1, 15, 8, tzinfo=timezone.utc)
+DEMO_END = DEMO_START + timedelta(hours=6)
+
+
 def synthetic_measurements():
-    start = datetime(2026, 1, 15, 8, tzinfo=timezone.utc)
+    start = DEMO_START
     return [dict(datetime=(start + timedelta(minutes=5*i)).isoformat(),
                  sbp=round(113 + 8*math.sin(i/8), 1),
                  dbp=round(73 + 5*math.sin(i/9), 1),

@@ -20,7 +20,6 @@ window = BiobeatApp(demo=True)
 window.resize(1400, 1100)
 output = Path(__file__).resolve().parents[1] / 'docs/images'
 output.mkdir(parents=True, exist_ok=True)
-window.show()
 failed = True
 
 
@@ -34,7 +33,7 @@ def capture():
     assert window.grab().save(str(output / 'main-synthetic.png'))
     assert window.plot_view.grab().save(str(output / 'plots-synthetic.png'))
     # Keep the synthetic label and CSV controls visible alongside the data table.
-    window.plot_view.hide()
+    window.splitter.setSizes([0, 900])
     QTimer.singleShot(500, capture_table)
 
 
@@ -56,8 +55,8 @@ def timeout():
 
 
 window.plot_view.loadFinished.connect(lambda ok: QTimer.singleShot(2000, capture) if ok else None)
-QTimer.singleShot(1000, window._on_fetch)
 # Capture relies on loadFinished so the Plotly page has rendered.
 QTimer.singleShot(45000, timeout)
+window.show()
 app.exec_()
 raise SystemExit(1 if failed else 0)
