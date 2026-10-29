@@ -34,8 +34,20 @@ final result: passed
 
 ## Verification
 
-73 automated tests passed, including real Qt tests for minimum-size layout, automatic demo loading, timezone changes, typed sorting, export provenance, failed/empty subsequent requests and responsive shutdown. Ruff, compileall, shell syntax and whitespace checks passed. Launcher smoke selected the checkout's virtual environment and loaded the demo. Screenshot workflow exported 72 synthetic CSV rows. Recording workflow verified chart zoom, sorting and owned export/success dialogs; FFprobe confirmed 30 seconds, H.264, 1280 × 960, yuv420p. Publication-file secret scan: zero candidates; historical numeric identifier comparison: zero matching outgoing files. No live API verification is claimed.
+74 automated tests passed, including real Qt tests for minimum-size layout, automatic demo loading, timezone changes, typed sorting, export provenance, failed/empty subsequent requests and responsive shutdown. Ruff, compileall, shell syntax and whitespace checks passed. Launcher smoke selected the checkout's virtual environment and loaded the demo. Screenshot workflow exported 72 synthetic CSV rows. Recording workflow verified chart zoom, sorting and owned export/success dialogs; FFprobe confirmed 30 seconds, H.264, 1280 × 960, yuv420p. Publication-file secret scan: zero candidates; historical numeric identifier comparison: zero matching outgoing files. No live API verification is claimed.
 
 ## Follow-up polish
 
 P3: platform font rasterization and standard Qt icon appearance can differ on Windows/Linux. Native Windows/macOS/Linux visual parity has not been exhaustively checked.
+
+## Normal-range follow-up
+
+Restored visible green normal-range areas and dotted lower/upper boundaries in all
+six charts, with the existing bounds unchanged. Plotly had silently skipped shapes
+added before their subplot traces. A regression now checks all six rectangles,
+twelve boundary lines and their subplot references. The updated actual-widget
+screenshot was opened and visually checked: green regions and bounds are visible
+behind all six traces. Screenshot automation now waits for Plotly's full layout,
+rather than treating the initial placeholder page load as a rendered chart.
+
+Recording startup now waits for an actual six-trace Plotly layout, allowing variable desktop rendering time while keeping the output at 30 seconds. The refreshed recording completed chart zoom, sorting and CSV export verification.

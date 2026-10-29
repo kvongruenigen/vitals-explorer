@@ -62,8 +62,24 @@ def timeout():
     app.quit()
 
 
-window.plot_view.loadFinished.connect(lambda ok: QTimer.singleShot(2000, capture) if ok else None)
-# Capture relies on loadFinished so the Plotly page has rendered.
+def rendered(ready):
+    if ready and not capturing:
+        render_timer.stop()
+        QTimer.singleShot(500, capture)
+
+
+def check_rendered():
+    window.plot_view.page().runJavaScript(
+        "Boolean(document.querySelector('.plotly-graph-div') && "
+        "document.querySelector('.plotly-graph-div')._fullLayout && "
+        "document.querySelector('.plotly-graph-div').data.length === 6)", rendered)
+
+
+# The placeholder page also emits loadFinished; wait for actual Plotly rendering.
+render_timer = QTimer()
+render_timer.timeout.connect(check_rendered)
+render_timer.start(250)
+
 QTimer.singleShot(45000, timeout)
 window.show()
 app.exec_()

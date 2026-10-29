@@ -65,13 +65,6 @@ def create_vitals_dashboard(df, user_tz):
         row = (i // 3) + 1
         col = (i % 3) + 1
 
-        low, high = reference_ranges[vital]
-        fig.add_hrect(y0=low, y1=high, fillcolor='#dceee5', opacity=0.28,
-                      line_width=0, layer='below', row=row, col=col)
-        for threshold in (low, high):
-            fig.add_hline(y=threshold, line_dash='dot', line_color='#bccbc5',
-                          line_width=1, row=row, col=col)
-
         # Add the actual data trace
         fig.add_trace(
             go.Scatter(
@@ -92,6 +85,14 @@ def create_vitals_dashboard(df, user_tz):
             ),
             row=row, col=col
         )
+
+        # Plotly skips shapes on empty subplots: add the band after its trace.
+        low, high = reference_ranges[vital]
+        fig.add_hrect(y0=low, y1=high, fillcolor='#b9e4c9', opacity=0.4,
+                      line_width=0, layer='below', row=row, col=col)
+        for threshold in (low, high):
+            fig.add_hline(y=threshold, line_dash='dot', line_color='#88a795',
+                          line_width=1, row=row, col=col)
 
         # Customize axes
         fig.update_xaxes(
